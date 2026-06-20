@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import os
 from sklearn.metrics.pairwise import cosine_similarity
 import warnings
 
 warnings.filterwarnings("ignore")
 
 # --------------------------------------------------
-# Page Config
+# PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(
     page_title="Book Recommendation System",
@@ -17,26 +18,65 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Load Models
+# LOAD MODELS
 # --------------------------------------------------
 @st.cache_resource
 def load_models():
 
-    popularity_model = pickle.load(open("popularity.pkl", "rb"))
+    required_files = [
+        "popularity.pkl",
+        "user_sim_df.pkl",
+        "user_book_matrix.pkl",
+        "cf_data.pkl",
+        "books_cb.pkl",
+        "tfidf_matrix.pkl",
+        "title_to_idx.pkl"
+    ]
 
-    user_sim_df = pickle.load(open("user_sim_df.pkl", "rb"))
-    user_book_matrix = pickle.load(open("user_book_matrix.pkl", "rb"))
-    filtered_df = pickle.load(open("filtered_df.pkl", "rb"))
+    missing_files = [
+        file for file in required_files
+        if not os.path.exists(file)
+    ]
 
-    books_cb = pickle.load(open("books_cb.pkl", "rb"))
-    tfidf_matrix = pickle.load(open("tfidf_matrix.pkl", "rb"))
-    title_to_idx = pickle.load(open("title_to_idx.pkl", "rb"))
+    if missing_files:
+        st.error(
+            f"Missing files: {', '.join(missing_files)}"
+        )
+        st.stop()
+
+    popularity_model = pickle.load(
+        open("popularity.pkl", "rb")
+    )
+
+    user_sim_df = pickle.load(
+        open("user_sim_df.pkl", "rb")
+    )
+
+    user_book_matrix = pickle.load(
+        open("user_book_matrix.pkl", "rb")
+    )
+
+    cf_data = pickle.load(
+        open("cf_data.pkl", "rb")
+    )
+
+    books_cb = pickle.load(
+        open("books_cb.pkl", "rb")
+    )
+
+    tfidf_matrix = pickle.load(
+        open("tfidf_matrix.pkl", "rb")
+    )
+
+    title_to_idx = pickle.load(
+        open("title_to_idx.pkl", "rb")
+    )
 
     return (
         popularity_model,
         user_sim_df,
         user_book_matrix,
-        filtered_df,
+        cf_data,
         books_cb,
         tfidf_matrix,
         title_to_idx
@@ -47,16 +87,19 @@ def load_models():
     popularity_model,
     user_sim_df,
     user_book_matrix,
-    filtered_df,
+    cf_data,
     books_cb,
     tfidf_matrix,
     title_to_idx
 ) = load_models()
 
 # --------------------------------------------------
-# Collaborative Filtering Function
+# COLLABORATIVE FILTERING
 # --------------------------------------------------
-def recommend_for_user(user_id, n_recommendations=10):
+def recommend_for_user(
+    user_id,
+    n_recommendations=10
+):
 
     if user_id not in user_sim_df.index:
         return pd.DataFrame()
@@ -69,9 +112,9 @@ def recommend_for_user(user_id, n_recommendations=10):
         .index
     )
 
-    rated_books = set(
-        filtered_df[
-            filtered_df["User-ID"] == user_id
+    user_books = set(
+        cf_data[
+            cf_data["User-ID"] == user_id
         ]["Book-Title"]
     )
 
@@ -79,61 +122,64 @@ def recommend_for_user(user_id, n_recommendations=10):
 
     for sim_user in similar_users:
 
-        sim_ratings = filtered_df[
-            (filtered_df["User-ID"] == sim_user)
-            & (filtered_df["Book-Rating"] >= 7)
+        sim_ratings = cf_data[
+            (cf_data["User-ID"] == sim_user)
+            &
+            (cf_data["Book-Rating"] >= 7)
         ]
 
         for _, row in sim_ratings.iterrows():
 
-            book = row["Book-Title"]
+            title = row["Book-Title"]
 
-            if book not in rated_books:
+            if title not in user_books:
 
-                if book not in recommendations:
-                    recommendations[book] = []
-
-                recommendations[book].append(
+                recommendations.setdefault(
+                    title,
+                    []
+                ).append(
                     row["Book-Rating"]
                 )
 
-    if len(recommendations) == 0:
+    if not recommendations:
         return pd.DataFrame()
 
-    rec_df = pd.DataFrame(
-        [
-            {
-                "Book-Title": book,
-                "Predicted Rating": round(
-                    np.mean(ratings), 2
-                ),
-            }
-            for book, ratings in recommendations.items()
-        ]
-    )
+    rec_df = pd.DataFrame([
+        {
+            "Book Title": title,
+            "Predicted Rating":
+            round(np.mean(ratings), 2)
+        }
+        for title, ratings
+        in recommendations.items()
+    ])
 
     rec_df = rec_df.sort_values(
         "Predicted Rating",
         ascending=False
-    ).head(n_recommendations)
+    )
 
-    return rec_df
-
+    return rec_df.head(
+        n_recommendations
+    )
 
 # --------------------------------------------------
-# Content Based Function
+# CONTENT-BASED FILTERING
 # --------------------------------------------------
-def recommend_similar_books(book_title, n=10):
+def recommend_similar_books(
+    book_title,
+    n=10
+):
 
-    search_title = book_title.lower()
+    search = book_title.lower()
 
     matches = [
         title
         for title in title_to_idx.index
-        if search_title in title
+        if search in title
     ]
 
-    if len(matches) == 0:
+    if not matches:
         return pd.DataFrame()
 
     idx = title_to_idx[matches[0]]
@@ -141,45 +187,56 @@ def recommend_similar_books(book_title, n=10):
     if isinstance(idx, pd.Series):
         idx = idx.iloc[0]
 
-    similarity_scores = cosine_similarity(
+    similarity = cosine_similarity(
         tfidf_matrix[idx],
         tfidf_matrix
     ).flatten()
 
     top_indices = (
-        np.argsort(similarity_scores)[::-1][1:n+1]
+        np.argsort(similarity)[::-1]
+        [1:n+1]
     )
 
-    result = books_cb.iloc[top_indices][
-        ["Book-Title", "Book-Author"]
+    result = books_cb.iloc[
+        top_indices
+    ][
+        [
+            "Book-Title",
+            "Book-Author"
+        ]
     ].copy()
 
     result["Similarity Score"] = np.round(
-        similarity_scores[top_indices],
+        similarity[top_indices],
         3
     )
 
-    return result.reset_index(drop=True)
-
+    return result.reset_index(
+        drop=True
+    )
 
 # --------------------------------------------------
-# UI
+# HEADER
 # --------------------------------------------------
 st.title("📚 Book Recommendation System")
 
 st.markdown(
     """
-    This application recommends books using:
+    Recommend books using:
 
-    - ⭐ Popularity-Based Filtering
-    - 👥 Collaborative Filtering
-    - 📖 Content-Based Filtering
+    ⭐ Popularity-Based Filtering
+
+    👥 Collaborative Filtering
+
+    📖 Content-Based Filtering
     """
 )
 
-# Sidebar
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
 model_choice = st.sidebar.radio(
-    "Choose Recommendation Method",
+    "Select Recommendation Model",
     [
         "Popularity-Based",
         "Collaborative Filtering",
@@ -188,11 +245,13 @@ model_choice = st.sidebar.radio(
 )
 
 # --------------------------------------------------
-# Popularity Model
+# POPULARITY
 # --------------------------------------------------
 if model_choice == "Popularity-Based":
 
-    st.header("⭐ Top Popular Books")
+    st.header(
+        "⭐ Top Popular Books"
+    )
 
     st.dataframe(
         popularity_model[
@@ -207,14 +266,16 @@ if model_choice == "Popularity-Based":
     )
 
 # --------------------------------------------------
-# Collaborative Filtering
+# COLLABORATIVE
 # --------------------------------------------------
 elif model_choice == "Collaborative Filtering":
 
-    st.header("👥 User-Based Recommendations")
+    st.header(
+        "👥 User-Based Recommendations"
+    )
 
     user_ids = sorted(
-        filtered_df["User-ID"]
+        cf_data["User-ID"]
         .unique()
         .tolist()
     )
@@ -224,13 +285,15 @@ elif model_choice == "Collaborative Filtering":
         user_ids
     )
 
-    if st.button("Get Recommendations"):
+    if st.button(
+        "Get Recommendations"
+    ):
 
-        recommendations = recommend_for_user(
+        recs = recommend_for_user(
             selected_user
         )
 
-        if recommendations.empty:
+        if recs.empty:
 
             st.warning(
                 "No recommendations found."
@@ -239,43 +302,47 @@ elif model_choice == "Collaborative Filtering":
         else:
 
             st.success(
-                f"Top recommendations for User {selected_user}"
+                f"Recommendations for User {selected_user}"
             )
 
             st.dataframe(
-                recommendations,
+                recs,
                 use_container_width=True
             )
 
 # --------------------------------------------------
-# Content Based
+# CONTENT BASED
 # --------------------------------------------------
-else:
+elif model_choice == "Content-Based":
 
-    st.header("📖 Similar Books")
+    st.header(
+        "📖 Similar Books"
+    )
 
     book_input = st.text_input(
         "Enter Book Title"
     )
 
-    if st.button("Find Similar Books"):
+    if st.button(
+        "Find Similar Books"
+    ):
 
         if not book_input.strip():
 
             st.warning(
-                "Please enter a book title."
+                "Enter a book title."
             )
 
         else:
 
-            recommendations = recommend_similar_books(
+            recs = recommend_similar_books(
                 book_input
             )
 
-            if recommendations.empty:
+            if recs.empty:
 
                 st.error(
-                    "Book not found."
+                    "No matching book found."
                 )
 
             else:
@@ -285,14 +352,14 @@ else:
                 )
 
                 st.dataframe(
-                    recommendations,
+                    recs,
                     use_container_width=True
                 )
 
 # --------------------------------------------------
-# Footer
+# FOOTER
 # --------------------------------------------------
 st.markdown("---")
 st.caption(
-    "Book Recommendation System using Popularity, Collaborative, and Content-Based Filtering."
+    "Book Recommendation System using Machine Learning"
 )
