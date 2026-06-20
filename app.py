@@ -406,60 +406,117 @@ elif menu == "⭐ Popularity-Based":
 # --------------------------------------------------
 # COLLABORATIVE
 # --------------------------------------------------
+# --------------------------------------------------
+# READER PROFILES (COLLABORATIVE FILTERING)
+# --------------------------------------------------
 elif menu == "👥 Collaborative Filtering":
 
-    st.title(
-        "👥 User-Based Recommendation"
+    st.title("👥 Reader Profiles & Recommendations")
+
+    # Create Reader Profile Summary
+    user_summary = (
+        cf_data.groupby("User-ID")
+        .agg(
+            Books_Rated=("Book-Title", "count"),
+            Avg_Rating=("Book-Rating", "mean")
+        )
+        .reset_index()
     )
 
-    user_ids = sorted(
-        cf_data["User-ID"]
-        .unique()
-        .tolist()
+    user_summary["Avg_Rating"] = (
+        user_summary["Avg_Rating"]
+        .round(2)
     )
 
-    selected_user = st.selectbox(
-        "Select User",
-        user_ids
+    # Create Display Label
+    user_summary["Profile"] = (
+        "Reader "
+        + user_summary["User-ID"].astype(str)
+        + " | Books Rated: "
+        + user_summary["Books_Rated"].astype(str)
+        + " | Avg Rating: "
+        + user_summary["Avg_Rating"].astype(str)
     )
 
-    st.subheader(
-        "User History"
+    selected_profile = st.selectbox(
+        "Select Reader Profile",
+        user_summary["Profile"]
     )
+
+    selected_user = int(
+        selected_profile.split("|")[0]
+        .replace("Reader", "")
+        .strip()
+    )
+
+    # Profile Metrics
+    profile = user_summary[
+        user_summary["User-ID"]
+        == selected_user
+    ]
+
+    col1, col2 = st.columns(2)
+
+    col1.metric(
+        "Books Rated",
+        int(profile["Books_Rated"].iloc[0])
+    )
+
+    col2.metric(
+        "Average Rating",
+        float(profile["Avg_Rating"].iloc[0])
+    )
+
+    st.markdown("---")
+
+    # User History
+    st.subheader("📚 Reading History")
 
     history = cf_data[
         cf_data["User-ID"]
         == selected_user
+    ][
+        [
+            "Book-Title",
+            "Book-Rating"
+        ]
     ]
 
     st.dataframe(
-        history[
-            [
-                "Book-Title",
-                "Book-Rating"
-            ]
-        ],
+        history.sort_values(
+            "Book-Rating",
+            ascending=False
+        ),
         use_container_width=True
     )
 
+    st.markdown("---")
+
+    # Recommendations
     if st.button(
-        "Recommend Books"
+        "🎯 Get Personalized Recommendations"
     ):
 
-        recs = recommend_for_user(
+        recommendations = recommend_for_user(
             selected_user
         )
 
-        if recs.empty:
+        if recommendations.empty:
+
             st.warning(
-                "No recommendations found."
-            )
-        else:
-            st.dataframe(
-                recs,
-                use_container_width=True
+                "No recommendations available."
             )
 
+        else:
+
+            st.subheader(
+                "📖 Recommended Books"
+            )
+
+            st.dataframe(
+                recommendations,
+                use_container_width=True
+            )
 # --------------------------------------------------
 # CONTENT BASED
 # --------------------------------------------------
