@@ -260,7 +260,7 @@ if menu == "🏠 Home":
         """
         Welcome to the Book Recommendation System.
 
-        This application provides:
+       # This application provides:
 
         - ⭐ Popularity-Based Recommendations
         - 👥 Collaborative Filtering
@@ -291,7 +291,7 @@ if menu == "🏠 Home":
 # --------------------------------------------------
 # EDA
 # --------------------------------------------------
-elif menu == "📊 EDA Dashboard":
+elif menu == "📊 Dashboard":
 
     st.title(
         "📊 Exploratory Data Analysis"
