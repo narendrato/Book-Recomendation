@@ -291,7 +291,7 @@ if menu == "🏠 Home":
 # --------------------------------------------------
 # EDA
 # --------------------------------------------------
-elif menu == "📊 Dashboard":
+elif menu == "📊 EDA Dashboard":
 
     st.title(
         "📊 Exploratory Data Analysis"
