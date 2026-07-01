@@ -299,7 +299,7 @@ def recommend_for_user(
             "avg_rating",
             ascending=False
         ).head(n_recommendations)
-            except Exception as e:
+        except Exception as e:
 
         print(e)
         return pd.DataFrame()
