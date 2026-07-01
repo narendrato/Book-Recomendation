@@ -67,68 +67,6 @@ def load_data():
     title_to_idx,
     tfidf_matrix
 )=load_data()
-
-# ----------------------------------------------------
-# COLLABORATIVE FILTERING
-# ----------------------------------------------------
-def recommend_for_user(user_id,n_recommendations=10):
-
-    try:
-
-        similar_users = (
-            user_sim_df[user_id]
-            .drop(user_id)
-            .sort_values(ascending=False)
-            .head(10)
-            .index
-        )
-
-        user_books = set(
-            cf_data[
-                cf_data["User-ID"]==user_id
-            ]["Book-Title"]
-        )
-
-        recommendations={}
-
-        for sim_user in similar_users:
-
-            ratings = cf_data[
-                (cf_data["User-ID"]==sim_user) &
-                (cf_data["Book-Rating"]>=7)
-            ]
-
-            for _,row in ratings.iterrows():
-
-                if row["Book-Title"] not in user_books:
-
-                    recommendations.setdefault(
-                        row["Book-Title"],
-                        []
-                    ).append(
-                        row["Book-Rating"]
-                    )
-
-        rec_df=pd.DataFrame([
-
-            {
-                "Book Title":book,
-                "Predicted Rating":round(np.mean(ratings),2)
-
-            }
-
-            for book,ratings in recommendations.items()
-
-        ])
-
-        return rec_df.sort_values(
-            "Predicted Rating",
-            ascending=False
-        ).head(n_recommendations)
-
-    except:
-        return pd.DataFrame()
-
 # ----------------------------------------------------
 # CONTENT BASED
 # ----------------------------------------------------
@@ -197,6 +135,54 @@ This dashboard provides
 """)
 
 st.markdown("---")
+# ==========================================================
+# COLLABORATIVE FILTERING
+# ==========================================================
+
+st.header("👥 Reader Profiles")
+
+user_summary = (
+    cf_data.groupby("User-ID")
+    .agg(
+        Books_Rated=("Book-Title", "count"),
+        Avg_Rating=("Book-Rating", "mean")
+    )
+    .reset_index()
+)
+
+user_summary["Avg_Rating"] = user_summary["Avg_Rating"].round(2)
+
+user_summary["Profile"] = (
+    "Reader "
+    + user_summary["User-ID"].astype(str)
+    + " | Books Rated: "
+    + user_summary["Books_Rated"].astype(str)
+    + " | Avg Rating: "
+    + user_summary["Avg_Rating"].astype(str)
+)
+
+selected_profile = st.selectbox(
+    "Select Reader",
+    user_summary["Profile"]
+)
+
+selected_user = int(
+    selected_profile.split("|")[0]
+    .replace("Reader", "")
+    .strip()
+)
+
+profile = user_summary[
+    user_summary["User-ID"] == selected_user
+]
+
+books_rated = int(profile["Books_Rated"].iloc[0])
+avg_rating = float(profile["Avg_Rating"].iloc[0])
+
+col1, col2 = st.columns(2)
+
+col1.metric("Books Rated", books_rated)
+col2.metric("Average Rating", round(avg_rating, 2))
 
 # ==========================================================
 # OVERVIEW
