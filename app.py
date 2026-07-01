@@ -298,7 +298,7 @@ def recommend_for_user(
         return rec_df.sort_values(
             "avg_rating",
             ascending=False
-        ).head(n_recommendations
+        ).head(n_recommendations)
             except Exception as e:
 
         print(e)
