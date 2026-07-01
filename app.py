@@ -190,23 +190,23 @@ col2.metric("Average Rating", round(avg_rating, 2))
 
 st.subheader("📊 Dataset Overview")
 
-c1,c2,c3,c4=st.columns(4)
+c1,c2=st.columns(2)
 
 profile = user_summary[
     user_summary["User-ID"] == selected_user
 ]
 
-c1, c2 = st.columns(2)
-
 books_rated = int(profile["Books_Rated"].iloc[0])
 avg_rating = round(float(profile["Avg_Rating"].iloc[0]), 2)
 
-c1.metric(
+col1, col2 = st.columns(2)
+
+col1.metric(
     "Books Rated",
     books_rated
 )
 
-c2.metric(
+col2.metric(
     "Average Rating",
     avg_rating
 )
