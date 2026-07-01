@@ -214,94 +214,56 @@ def show_book_cards(df, books_per_row=5):
 
 
 # --------------------------------------------------
-# COLLABORATIVE FILTERING
+# CONTENT-BASED RECOMMENDATIONS
 # --------------------------------------------------
-def recommend_for_user(
-    user_id,
-    n_recommendations=10
-):
+def recommend_similar_books(book_title, n=10):
 
     try:
 
-        similar_users = (
-            user_sim_df[user_id]
-            .drop(user_id)
-            .sort_values(
-                ascending=False
-            )
-            .head(10)
-            .index
+        # Check if book exists
+        if book_title not in title_to_idx.index:
+            st.error(f"'{book_title}' not found in title_to_idx")
+            return pd.DataFrame()
+
+        idx = title_to_idx[book_title]
+
+        # Handle duplicate titles
+        if isinstance(idx, pd.Series):
+            idx = idx.iloc[0]
+
+        # Calculate similarity scores
+        similarity_scores = cosine_similarity(
+            tfidf_matrix[idx],
+            tfidf_matrix
+        ).flatten()
+
+        # Get top similar books
+        top_indices = np.argsort(
+            similarity_scores
+        )[::-1][1:n+1]
+
+        # Create recommendations
+        recommendations = books_cb.iloc[
+            top_indices
+        ][
+            ["ISBN", "Book-Title", "Book-Author"]
+        ].copy()
+
+        recommendations["avg_rating"] = np.round(
+            similarity_scores[top_indices],
+            3
         )
 
-        user_books = set(
-            cf_data[
-                cf_data["User-ID"] == user_id
-            ]["Book-Title"]
+        return recommendations.reset_index(
+            drop=True
         )
 
-        recommendations = {}
+    except Exception as e:
 
-        for sim_user in similar_users:
+        st.error(
+            f"Content-Based Recommendation Error: {e}"
+        )
 
-            sim_ratings = cf_data[
-                (
-                    cf_data["User-ID"]
-                    == sim_user
-                )
-                &
-                (
-                    cf_data["Book-Rating"]
-                    >= 7
-                )
-            ]
-
-            for _, row in sim_ratings.iterrows():
-
-                book = row["Book-Title"]
-
-                if book not in user_books:
-
-                    recommendations.setdefault(
-                        book,
-                        []
-                    ).append(
-                        row["Book-Rating"]
-                    )
-
-        rec_df = pd.DataFrame([
-            {
-                "Book-Title": book,
-                "Book-Author":
-                books_cb[
-                    books_cb["Book-Title"]
-                    == book
-                ]["Book-Author"].iloc[0]
-                if len(
-                    books_cb[
-                        books_cb["Book-Title"]
-                        == book
-                    ]
-                )
-                else "Unknown",
-
-                "avg_rating":
-                round(
-                    np.mean(ratings),
-                    2
-                )
-            }
-
-            for book, ratings
-            in recommendations.items()
-        ])
-
-        return rec_df.sort_values(
-            "avg_rating",
-            ascending=False
-        ).head(n_recommendations)
-        except Exception as e:
-
-        print(e)
         return pd.DataFrame()
 # --------------------------------------------------
 # CONTENT-BASED RECOMMENDATIONS
