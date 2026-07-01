@@ -302,60 +302,95 @@ def recommend_for_user(
 # --------------------------------------------------
 # CONTENT-BASED RECOMMENDATIONS
 # --------------------------------------------------
-def recommend_similar_books(
-    book_title,
-    n=10
+def recommend_for_user(
+    user_id,
+    n_recommendations=10
 ):
 
     try:
 
-        search = book_title.lower()
-
-        matches = [
-            title
-            for title in title_to_idx.index
-            if search in title.lower()
-        ]
-
-        if len(matches) == 0:
-            return pd.DataFrame()
-
-        idx = title_to_idx[matches[0]]
-
-        if isinstance(idx, pd.Series):
-            idx = idx.iloc[0]
-
-        similarity = cosine_similarity(
-            tfidf_matrix[idx],
-            tfidf_matrix
-        ).flatten()
-
-        top_indices = (
-            np.argsort(similarity)[::-1][1:n+1]
+        similar_users = (
+            user_sim_df[user_id]
+            .drop(user_id)
+            .sort_values(
+                ascending=False
+            )
+            .head(10)
+            .index
         )
 
-        result = books_cb.iloc[
-            top_indices
-        ][
-            [
-                "Book-Title",
-                "Book-Author"
+        user_books = set(
+            cf_data[
+                cf_data["User-ID"] == user_id
+            ]["Book-Title"]
+        )
+
+        recommendations = {}
+
+        for sim_user in similar_users:
+
+            sim_ratings = cf_data[
+                (
+                    cf_data["User-ID"]
+                    == sim_user
+                )
+                &
+                (
+                    cf_data["Book-Rating"]
+                    >= 7
+                )
             ]
-        ].copy()
 
-        result["avg_rating"] = np.round(
-            similarity[top_indices],
-            3
+            for _, row in sim_ratings.iterrows():
+
+                book = row["Book-Title"]
+
+                if book not in user_books:
+
+                    recommendations.setdefault(
+                        book,
+                        []
+                    ).append(
+                        row["Book-Rating"]
+                    )
+
+        rec_df = pd.DataFrame([
+            {
+                "Book-Title": book,
+                "Book-Author":
+                books_cb[
+                    books_cb["Book-Title"] == book
+                ]["Book-Author"].iloc[0]
+                if len(
+                    books_cb[
+                        books_cb["Book-Title"] == book
+                    ]
+                )
+                else "Unknown",
+
+                "avg_rating":
+                round(
+                    np.mean(ratings),
+                    2
+                )
+            }
+
+            for book, ratings
+            in recommendations.items()
+        ])
+
+        return rec_df.sort_values(
+            "avg_rating",
+            ascending=False
+        ).head(n_recommendations)
+
+    except Exception as e:
+
+        st.error(
+            f"Recommendation Error: {e}"
         )
 
-        return result.reset_index(
-            drop=True
-        )
-
-    except Exception:
         return pd.DataFrame()
-
-
 # --------------------------------------------------
 # SIDEBAR
 # --------------------------------------------------
